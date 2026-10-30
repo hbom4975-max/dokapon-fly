@@ -7,7 +7,7 @@ primary_region = "sin"   # สิงคโปร์ ใกล้ไทยที�
 
 [env]
   # แก้เป็นรหัสห้องของคุณเอง 6 ตัว (A-Z หรือ 2-9) ก่อนอัปโหลด ห้ามใช้ค่านี้ตรง ๆ
-  ROOM = "CHANGE"
+  ROOM = "bom666"
   PORT = "8080"
   DATA_DIR = "/data"
   IDLE_MINUTES = "15"
