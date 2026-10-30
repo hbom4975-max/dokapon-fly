@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Dokapon Online — ผู้เล่น</title>
+<style>
+:root{
+  --bg:#14122b; --panel:#201d42; --key:#2c2859; --ink:#f3efe6; --dim:#9a96c0;
+  --tri:#4fb286; --cir:#e4586b; --crs:#5b7fe8; --sqr:#d88ac2; --gold:#f2c14e;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
+  font-family:ui-rounded,"Hiragino Maru Gothic ProN","Noto Sans Thai","Sarabun",system-ui,sans-serif}
+input{-webkit-user-select:text;user-select:text;touch-action:auto}
+.hidden{display:none!important}
+
+/* ---------- หน้าเข้าห้อง ---------- */
+#join{height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+#join form{width:min(380px,100%);display:grid;gap:14px}
+#join h1{margin:0 0 4px;font-size:30px;line-height:1.15;letter-spacing:.01em}
+#join p{margin:0;color:var(--dim);font-size:15px;line-height:1.5}
+label{display:grid;gap:6px;font-size:14px;color:var(--dim)}
+input{font:inherit;font-size:20px;color:var(--ink);background:var(--panel);border:2px solid var(--key);
+  border-radius:14px;padding:12px 14px;outline:none}
+input:focus-visible{border-color:var(--gold)}
+#code{letter-spacing:.3em;text-transform:uppercase;text-align:center;font-weight:700}
+button.primary{font:inherit;font-size:18px;font-weight:700;color:#1b1630;background:var(--gold);
+  border:0;border-radius:14px;padding:14px;touch-action:manipulation}
+button.primary:active{transform:translateY(1px)}
+#err{color:#ff8fa0;font-size:15px;min-height:1.3em}
+
+/* ---------- หน้าเล่น ---------- */
+#game{height:100%;display:flex;flex-direction:column}
+.stage{flex:1;min-height:0;background:#000;position:relative}
+video{width:100%;height:100%;object-fit:contain;background:#000}
+#status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:20px;color:var(--dim);font-size:16px;line-height:1.5;pointer-events:none}
+#badge{position:absolute;top:calc(8px + env(safe-area-inset-top));left:10px;font-size:13px;font-weight:700;
+  color:#1b1630;background:var(--gold);padding:4px 10px;border-radius:999px;pointer-events:none}
+#sound{position:absolute;top:calc(8px + env(safe-area-inset-top));right:10px;font:inherit;font-size:13px;
+  color:var(--ink);background:rgba(32,29,66,.9);border:1px solid var(--key);border-radius:999px;padding:5px 12px;touch-action:manipulation}
+
+.pad{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:var(--panel)}
+.side{display:grid;gap:10px;justify-items:center}
+.shoulders{display:flex;gap:10px;width:100%;justify-content:center}
+.sh{flex:1;max-width:96px;height:38px;border-radius:12px;font-weight:700;font-size:15px}
+.btn{display:flex;align-items:center;justify-content:center;color:var(--ink);background:var(--key);
+  border:2px solid #3b3672;border-radius:14px;font-weight:700;touch-action:none}
+.btn.on{background:var(--gold);color:#1b1630;border-color:var(--gold);transform:scale(.95)}
+
+.dpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
+.dpad .btn{font-size:22px;border-radius:12px}
+.u{grid-area:1/2}.l{grid-area:2/1}.r{grid-area:2/3}.d{grid-area:3/2}
+.face{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
+.face .btn{border-radius:50%;font-size:24px;border-width:3px}
+.f-tri{grid-area:1/2;border-color:var(--tri);color:var(--tri)}
+.f-sqr{grid-area:2/1;border-color:var(--sqr);color:var(--sqr)}
+.f-cir{grid-area:2/3;border-color:var(--cir);color:var(--cir)}
+.f-crs{grid-area:3/2;border-color:var(--crs);color:var(--crs)}
+.face .btn.on{color:#1b1630}
+.mid{display:grid;gap:8px;padding-bottom:6px}
+.mid .btn{width:76px;height:34px;font-size:13px;border-radius:999px}
+
+/* แนวนอน: ปุ่มลอยทับภาพ */
+@media (orientation:landscape) and (max-height:560px){
+  #game{position:relative}
+  .stage{position:absolute;inset:0}
+  .pad{position:absolute;left:0;right:0;bottom:0;background:none;pointer-events:none;
+    padding:0 calc(16px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  .pad .btn{pointer-events:auto;opacity:.6;background:rgba(32,29,66,.85)}
+  .pad .btn.on{opacity:.95;background:var(--gold)}
+  .dpad,.face{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px)}
+  .sh{height:32px}
+}
+</style>
+</head>
+<body>
+
+<div id="join">
+  <form id="joinForm" autocomplete="off">
+    <h1>เข้าห้อง Dokapon</h1>
+    <p>ใส่รหัสห้องที่เพื่อนส่งให้ แล้วกดเข้าห้อง จอเกมจะขึ้นมาทันทีที่เครื่องเกมพร้อม</p>
+    <p id="srv" style="color:#f2c14e"></p>
+    <label>รหัสห้อง<input id="code" maxlength="6" inputmode="text" autocapitalize="characters" required></label>
+    <label>ชื่อของคุณ<input id="name" maxlength="20" placeholder="เช่น Bom"></label>
+    <button class="primary" id="joinBtn" type="submit">เข้าห้อง</button>
+    <div id="err" role="alert"></div>
+  </form>
+</div>
+
+<div id="game" class="hidden">
+  <div class="stage">
+    <video id="v" autoplay playsinline muted></video>
+    <div id="status">กำลังรอโฮสต์เริ่มสตรีม…</div>
+    <div id="badge"></div>
+    <button id="sound" class="hidden">แตะเพื่อเปิดเสียง</button>
+  </div>
+  <div class="pad">
+    <div class="side">
+      <div class="shoulders">
+        <div class="btn sh" data-b="12">L2</div>
+        <div class="btn sh" data-b="10">L1</div>
+      </div>
+      <div class="dpad">
+        <div class="btn u" data-b="4">▲</div>
+        <div class="btn l" data-b="6">◀</div>
+        <div class="btn r" data-b="7">▶</div>
+        <div class="btn d" data-b="5">▼</div>
+      </div>
+    </div>
+    <div class="mid">
+      <div class="btn" data-b="2">Select</div>
+      <div class="btn" data-b="3">Start</div>
+    </div>
+    <div class="side">
+      <div class="shoulders">
+        <div class="btn sh" data-b="11">R1</div>
+        <div class="btn sh" data-b="13">R2</div>
+      </div>
+      <div class="face">
+        <div class="btn f-tri" data-b="9">△</div>
+        <div class="btn f-sqr" data-b="1">□</div>
+        <div class="btn f-cir" data-b="8">○</div>
+        <div class="btn f-crs" data-b="0">✕</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// รหัสปุ่มตามมาตรฐาน libretro RetroPad
+// 0=✕(B) 1=□(Y) 2=Select 3=Start 4=ขึ้น 5=ลง 6=ซ้าย 7=ขวา 8=○(A) 9=△(X) 10=L1 11=R1 12=L2 13=R2
+const $ = (id) => document.getElementById(id);
+const v = $('v');
+let peer = null, conn = null, wl = null;
+
+const params = new URLSearchParams(location.search);
+if (params.get('room')) $('code').value = params.get('room').toUpperCase();
+try { $('name').value = localStorage.getItem('dokapon-name') || ''; } catch {}
+
+// ---- โหมดคลาวด์: ดูสถานะเครื่องเกม + keepalive ----
+let polls = 0;
+async function pollStatus() {
+  if (!$('game').classList.contains('hidden') || polls++ > 45) return;
+  try {
+    const j = await (await fetch('/status', { cache: 'no-store' })).json();
+    $('srv').textContent = j.ready ? 'เครื่องเกมพร้อมแล้ว เข้าห้องได้เลย' : j.hasGame ? 'กำลังเตรียมเกม รอประมาณ 1 นาที…' : 'โฮสต์ยังไม่ได้อัปโหลดไฟล์เกม';
+  } catch (e) { $('srv').textContent = 'กำลังปลุกเครื่อง รอสักครู่…'; }
+  setTimeout(pollStatus, 4000);
+}
+pollStatus();
+let ka = null, kaTimer = null;
+function keepAlive() {
+  try {
+    ka = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/keepalive');
+    ka.onopen = () => { kaTimer = setInterval(() => { try { ka.send('p'); } catch (e) {} }, 20000); };
+    ka.onclose = (e) => { clearInterval(kaTimer); if (e.code !== 4000) setTimeout(keepAlive, 3000); };
+  } catch (e) {}
+}
+
+function send(o) { if (conn && conn.open) conn.send(o); }
+function setStatus(t) { $('status').textContent = t; $('status').classList.toggle('hidden', !t); }
+
+async function keepAwake() { try { if ('wakeLock' in navigator) wl = await navigator.wakeLock.request('screen'); } catch {} }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) [...held].forEach((b) => setBtn(b, false));
+  else if (!$('game').classList.contains('hidden')) keepAwake();
+});
+
+$('joinForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  $('err').textContent = '';
+  const room = $('code').value.trim().toUpperCase();
+  const name = $('name').value.trim();
+  if (!room) return;
+  try { localStorage.setItem('dokapon-name', name); } catch {}
+  $('joinBtn').disabled = true;
+  $('joinBtn').textContent = 'กำลังเชื่อมต่อ…';
+
+  peer = new Peer();
+  peer.on('open', () => {
+    conn = peer.connect('dokapon-' + room, { reliable: true });
+    conn.on('open', () => send({ type: 'join', name }));
+    conn.on('data', onData);
+    conn.on('close', () => fail('หลุดการเชื่อมต่อกับโฮสต์'));
+    conn.on('error', () => fail('เชื่อมต่อห้องไม่ได้'));
+  });
+  peer.on('call', (call) => {
+    call.answer();
+    call.on('stream', (s) => {
+      v.srcObject = s;
+      try {
+        call.peerConnection.getReceivers().forEach((r) => {
+          if ('playoutDelayHint' in r) r.playoutDelayHint = 0;
+          if ('jitterBufferTarget' in r) r.jitterBufferTarget = 0;
+        });
+        call.peerConnection.oniceconnectionstatechange = () => {
+          const st = call.peerConnection.iceConnectionState;
+          if (st === 'failed') setStatus('เชื่อมต่อภาพไม่สำเร็จ ลองสลับ Wi-Fi/เน็ตมือถือ');
+          else if (st === 'disconnected') setStatus('สัญญาณสะดุด กำลังพยายามต่อใหม่…');
+          else if (st === 'connected' || st === 'completed') setStatus('');
+        };
+      } catch {}
+      setStatus('');
+      tryPlay();
+    });
+  });
+  peer.on('error', (err) => {
+    if (err.type === 'peer-unavailable') fail('ไม่พบห้องนี้ ตรวจรหัสห้อง หรือรอสักครู่ถ้าเครื่องเกมเพิ่งเริ่มทำงาน แล้วลองใหม่');
+    else fail('เชื่อมต่อไม่ได้ (' + err.type + ')');
+  });
+});
+
+function onData(m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'joined') {
+    $('join').classList.add('hidden');
+    $('game').classList.remove('hidden');
+    $('badge').textContent = 'ผู้เล่น ' + (m.slot + 1);
+    setStatus('กำลังรอโฮสต์เริ่มสตรีม…');
+    keepAwake();
+    keepAlive();
+  } else if (m.type === 'error') {
+    fail(m.message);
+  }
+}
+
+function fail(msg) {
+  if ($('game').classList.contains('hidden')) {
+    $('err').textContent = msg;
+    $('joinBtn').disabled = false;
+    $('joinBtn').textContent = 'เข้าห้อง';
+    return;
+  }
+  setStatus(msg + ' (แตะที่จอเพื่อโหลดใหม่)');
+  $('status').style.pointerEvents = 'auto';
+  $('status').onclick = () => location.reload();
+}
+
+function tryPlay() {
+  v.muted = false;
+  v.play().then(() => $('sound').classList.add('hidden')).catch(() => {
+    v.muted = true;
+    v.play().catch(() => {});
+    $('sound').classList.remove('hidden');
+  });
+}
+$('sound').addEventListener('click', () => { v.muted = false; v.play(); $('sound').classList.add('hidden'); });
+
+// ---------- ปุ่มควบคุม ----------
+const held = new Set();
+function setBtn(b, down) {
+  if (down === held.has(b)) return;
+  down ? held.add(b) : held.delete(b);
+  send({ type: 'input', btn: b, down });
+}
+document.querySelectorAll('[data-b]').forEach((el) => {
+  const b = Number(el.dataset.b);
+  const release = () => { el.classList.remove('on'); setBtn(b, false); };
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    el.classList.add('on');
+    setBtn(b, true);
+    if (navigator.vibrate) navigator.vibrate(8);
+  });
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('lostpointercapture', release);
+});
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// คีย์บอร์ด (เผื่อเล่นจากคอม)
+const KEYS = { ArrowUp: 4, ArrowDown: 5, ArrowLeft: 6, ArrowRight: 7, z: 0, x: 8, a: 1, s: 9, q: 10, w: 11, Enter: 3, Shift: 2 };
+addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT' || e.repeat) return; const b = KEYS[e.key]; if (b !== undefined) { e.preventDefault(); setBtn(b, true); } });
+addEventListener('keyup', (e) => { const b = KEYS[e.key]; if (b !== undefined) setBtn(b, false); });
+</script>
+</body>
+</html>

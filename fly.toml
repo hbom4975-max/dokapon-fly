@@ -1,0 +1,32 @@
+# ชื่อแอปถูกกำหนดจาก secret FLY_APP ตอน deploy (ค่านี้ไม่ถูกใช้)
+app = "change-me"
+primary_region = "sin"   # สิงคโปร์ ใกล้ไทยที่สุด
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # แก้เป็นรหัสห้องของคุณเอง 6 ตัว (A-Z หรือ 2-9) ก่อนอัปโหลด ห้ามใช้ค่านี้ตรง ๆ
+  ROOM = "CHANGE"
+  PORT = "8080"
+  DATA_DIR = "/data"
+  IDLE_MINUTES = "15"
+
+[mounts]
+  source = "dokapon_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  # ถ้าภาพยังกระตุกลองเปลี่ยนเป็น "performance-4x" (แพงขึ้น)
+  size = "performance-2x"
+
+[[restart]]
+  policy = "on-failure"
+  retries = 5

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>cloud host</title>
+<style>html,body{margin:0;background:#000}#game{width:640px;height:480px}</style>
+</head>
+<body>
+<div id="game"></div>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// หน้านี้รันในเบราว์เซอร์ฝั่งเซิร์ฟเวอร์ (เปิดโดย launcher.js) ไม่ใช่หน้าสำหรับคนเปิดเอง
+const ROOM = (new URLSearchParams(location.search).get('room') || 'DOKAPN').toUpperCase();
+const MAX_BITRATE = 3_000_000;
+const FPS = 30;
+const SLOTS = [0, 1, 2, 3]; // ในโหมดคลาวด์ ทุกคนเป็นเพื่อนที่เข้ามา (ผู้เล่น 1–4)
+
+// ---------- ดักเสียงจากอีมูเลเตอร์ ----------
+const audioDests = new Map();
+let restartTimer = null;
+function scheduleRestart(ms) { clearTimeout(restartTimer); restartTimer = setTimeout(restartAll, ms); }
+const origConnect = AudioNode.prototype.connect;
+AudioNode.prototype.connect = function (dest, ...rest) {
+  const r = origConnect.call(this, dest, ...rest);
+  try {
+    if (typeof AudioDestinationNode !== 'undefined' && dest instanceof AudioDestinationNode) {
+      const ctx = dest.context;
+      let md = audioDests.get(ctx);
+      if (!md) { md = ctx.createMediaStreamDestination(); audioDests.set(ctx, md); console.log('พบช่องเสียงของเกม'); scheduleRestart(1500); }
+      origConnect.call(this, md);
+    }
+  } catch (e) {}
+  return r;
+};
+
+const viewers = new Map(); // peerId -> {conn, slot, name, call}
+const held = new Map();
+let peer = null, gameStarted = false;
+
+function report() {
+  fetch('/internal/status', { method: 'POST', body: JSON.stringify({ peer: !!(peer && peer.open), game: gameStarted }) }).catch(() => {});
+}
+
+// ---------- ห้อง (PeerJS) ----------
+function openPeer() {
+  peer = new Peer('dokapon-' + ROOM);
+  peer.on('open', () => { console.log('ห้องพร้อมแล้ว รหัส ' + ROOM); report(); });
+  peer.on('connection', onConn);
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+  peer.on('error', (err) => {
+    console.log('peer error: ' + err.type);
+    if (err.type === 'unavailable-id') { try { peer.destroy(); } catch (e) {} setTimeout(openPeer, 5000); }
+  });
+}
+openPeer();
+setInterval(report, 15000);
+
+function onConn(conn) {
+  conn.on('data', (m) => {
+    if (!m || typeof m !== 'object') return;
+    if (m.type === 'join') {
+      if (viewers.has(conn.peer)) return;
+      const used = new Set([...viewers.values()].map((x) => x.slot));
+      const slot = SLOTS.find((s) => !used.has(s));
+      if (slot === undefined) { conn.send({ type: 'error', message: 'ห้องเต็มแล้ว (สูงสุด 4 คน)' }); setTimeout(() => conn.close(), 300); return; }
+      const name = String(m.name || '').trim().slice(0, 20) || 'Player' + (slot + 1);
+      viewers.set(conn.peer, { conn, slot, name, call: null });
+      console.log('เข้าห้อง: ' + name + ' = ผู้เล่น ' + (slot + 1));
+      conn.send({ type: 'joined', slot, name });
+      if (gameStarted) callViewer(conn.peer);
+    } else if (m.type === 'input') {
+      const x = viewers.get(conn.peer);
+      if (!x || !Number.isInteger(m.btn) || m.btn < 0 || m.btn > 15) return;
+      applyInput(x.slot, m.btn, !!m.down);
+    }
+  });
+  conn.on('close', () => dropViewer(conn.peer));
+  conn.on('error', () => dropViewer(conn.peer));
+}
+
+function dropViewer(id) {
+  const x = viewers.get(id);
+  if (!x) return;
+  console.log('ออกจากห้อง: ' + x.name);
+  try { if (x.call) x.call.close(); } catch (e) {}
+  const set = held.get(x.slot);
+  if (set) [...set].forEach((b) => applyInput(x.slot, b, false));
+  viewers.delete(id);
+}
+
+function applyInput(slot, btn, down) {
+  const gm = window.EJS_emulator && EJS_emulator.gameManager;
+  if (!gm || typeof gm.simulateInput !== 'function') return;
+  let set = held.get(slot);
+  if (!set) { set = new Set(); held.set(slot, set); }
+  down ? set.add(btn) : set.delete(btn);
+  try { gm.simulateInput(slot, btn, down ? 1 : 0); } catch (e) { console.error(e); }
+}
+
+// ---------- สตรีมภาพ/เสียงให้เพื่อน ----------
+function buildStream() {
+  const canvas = (window.EJS_emulator && EJS_emulator.canvas) || document.querySelector('#game canvas');
+  if (!canvas) return null;
+  const s = new MediaStream();
+  canvas.captureStream(FPS).getVideoTracks().forEach((t) => { try { t.contentHint = 'motion'; } catch (e) {} s.addTrack(t); });
+  audioDests.forEach((md) => md.stream.getAudioTracks().forEach((t) => s.addTrack(t)));
+  return s;
+}
+function callViewer(id) {
+  const x = viewers.get(id);
+  if (!x) return;
+  const stream = buildStream();
+  if (!stream) return;
+  try { if (x.call) x.call.close(); } catch (e) {}
+  const call = peer.call(id, stream);
+  x.call = call;
+  setTimeout(() => {
+    try {
+      for (const s of call.peerConnection.getSenders()) {
+        if (s.track && s.track.kind === 'video') {
+          const p = s.getParameters();
+          if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+          p.encodings[0].maxBitrate = MAX_BITRATE;
+          s.setParameters(p).catch(() => {});
+        }
+      }
+    } catch (e) {}
+  }, 1500);
+}
+function restartAll() { if (gameStarted) viewers.forEach((_, id) => callViewer(id)); }
+
+// ---------- โหลดเกมจากดิสก์ของเครื่อง (อัปโหลดที่ /upload.html) ----------
+async function waitForGame() {
+  for (;;) {
+    try {
+      const j = await (await fetch('/game/list.json', { cache: 'no-store' })).json();
+      if (j.game) return j;
+    } catch (e) {}
+    console.log('ยังไม่มีไฟล์เกม รอการอัปโหลดที่ /upload.html');
+    await new Promise((r) => setTimeout(r, 10000));
+  }
+}
+(async () => {
+  const j = await waitForGame();
+  console.log('พบไฟล์เกม: ' + j.game + ' กำลังโหลดอีมูเลเตอร์');
+  window.EJS_player = '#game';
+  window.EJS_core = 'psx';
+  window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+  window.EJS_gameUrl = '/game/file/game/' + encodeURIComponent(j.game);
+  window.EJS_gameName = 'dokapon';
+  window.EJS_startOnLoaded = true;
+  window.EJS_threads = false;
+  if (j.bios) window.EJS_biosUrl = '/game/file/bios/' + encodeURIComponent(j.bios);
+  window.EJS_onGameStart = () => {
+    gameStarted = true;
+    console.log('เกมเริ่มแล้ว');
+    report();
+    scheduleRestart(3000);
+  };
+  const s = document.createElement('script');
+  s.src = window.EJS_pathtodata + 'loader.js';
+  s.onerror = () => console.log('โหลด EmulatorJS ไม่สำเร็จ');
+  document.body.appendChild(s);
+})();
+</script>
+</body>
+</html>

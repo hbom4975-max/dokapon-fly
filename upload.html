@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>อัปโหลดไฟล์เกม</title>
+<style>
+:root{--bg:#14122b;--panel:#201d42;--key:#2c2859;--ink:#f3efe6;--dim:#9a96c0;--gold:#f2c14e;--ok:#4fb286;--bad:#e4586b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded,"Noto Sans Thai",system-ui,sans-serif;line-height:1.5;padding:18px}
+main{max-width:480px;margin:0 auto;display:grid;gap:14px}
+h1{font-size:24px;margin:0}
+p{margin:0;color:var(--dim);font-size:14px}
+label{display:grid;gap:4px;font-size:13px;color:var(--dim)}
+input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--panel);border:2px solid var(--key);border-radius:10px;padding:10px;width:100%}
+button{font:inherit;font-weight:700;font-size:16px;color:#1b1630;background:var(--gold);border:0;border-radius:10px;padding:12px;touch-action:manipulation}
+button.ghost{background:var(--key);color:var(--ink)}
+button:disabled{opacity:.5}
+progress{width:100%;height:14px}
+#msg{font-size:15px;min-height:1.4em}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+  <h1>อัปโหลดไฟล์เกม</h1>
+  <p>ใช้ Wi-Fi จะดีที่สุด ไฟล์ขนาด 210 MB ใช้เวลาหลายนาที อย่าปิดหน้านี้ระหว่างอัปโหลด</p>
+  <label>รหัสผู้ดูแล (ADMIN_TOKEN ที่ตั้งไว้)
+    <input type="password" id="token" autocomplete="off">
+  </label>
+  <label>ชนิดไฟล์
+    <select id="kind">
+      <option value="game">ไฟล์เกม (.bin หรือ .zip)</option>
+      <option value="bios">BIOS PS1 (.bin ไฟล์เดียว ไม่บังคับ)</option>
+    </select>
+  </label>
+  <label>เลือกไฟล์
+    <input type="file" id="file">
+  </label>
+  <button id="go">อัปโหลด</button>
+  <progress id="bar" value="0" max="100" hidden></progress>
+  <div id="msg"></div>
+  <hr style="border:0;border-top:1px solid var(--key);width:100%">
+  <p>เปลี่ยนเกมหรือโฮสต์ค้าง: อัปโหลดไฟล์ใหม่แล้วกดรีสตาร์ท เครื่องจะเริ่มใหม่ราว 1 นาที</p>
+  <button class="ghost" id="restart">รีสตาร์ทเครื่องเกม</button>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
+$('go').onclick = () => {
+  const f = $('file').files[0];
+  if (!f) return say('เลือกไฟล์ก่อน', 'bad');
+  if (!$('token').value) return say('ใส่รหัสผู้ดูแลก่อน', 'bad');
+  const xhr = new XMLHttpRequest();
+  xhr.open('PUT', '/upload?kind=' + $('kind').value + '&name=' + encodeURIComponent(f.name));
+  xhr.setRequestHeader('x-token', $('token').value);
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) { $('bar').hidden = false; $('bar').value = (e.loaded / e.total) * 100; say('กำลังอัปโหลด ' + Math.round((e.loaded / e.total) * 100) + '%'); } };
+  xhr.onload = () => {
+    let j = {}; try { j = JSON.parse(xhr.responseText); } catch (e) {}
+    if (xhr.status === 200) say('อัปโหลดเสร็จแล้ว (' + j.name + ') รอประมาณ 1 นาทีให้เกมโหลดบนเครื่อง', 'ok');
+    else say('ไม่สำเร็จ: ' + (j.error || xhr.status), 'bad');
+    $('go').disabled = false;
+  };
+  xhr.onerror = () => { say('การเชื่อมต่อขัดข้อง ลองใหม่', 'bad'); $('go').disabled = false; };
+  $('go').disabled = true;
+  say('เริ่มอัปโหลด…');
+  xhr.send(f);
+};
+$('restart').onclick = async () => {
+  if (!$('token').value) return say('ใส่รหัสผู้ดูแลก่อน', 'bad');
+  try {
+    const r = await fetch('/restart', { method: 'POST', headers: { 'x-token': $('token').value } });
+    say(r.ok ? 'สั่งรีสตาร์ทแล้ว รอประมาณ 1–2 นาที' : 'รหัสไม่ถูกต้องหรือสั่งไม่สำเร็จ', r.ok ? 'ok' : 'bad');
+  } catch (e) { say('สั่งไม่สำเร็จ', 'bad'); }
+};
+</script>
+</body>
+</html>
